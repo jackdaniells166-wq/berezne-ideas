@@ -6,7 +6,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
 const rateLimit = require('express-rate-limit');
-const db = require('./db');
+const { connect } = require('./db');
 
 const app = express();
 app.set('trust proxy', 1); // коректний IP за проксі (Render)
@@ -15,10 +15,22 @@ app.use(express.json({ limit: '32kb' }));
 app.use(cookieParser());
 
 // ---------- Налаштування (зі змінних середовища) ----------
+// Немає жодних fallback-значень для секретів навмисно: якщо змінна не
+// задана в Render, сервер повинен впасти з чіткою помилкою при старті,
+// а не тихо піднятися з дефолтним паролем, який лежить у публічному репо.
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`Відсутня обов'язкова змінна середовища: ${name}. Сервер не запущено.`);
+    process.exit(1);
+  }
+  return v;
+}
+
 const PORT = process.env.PORT || 3000;
-const ADMIN_LOGIN = process.env.ADMIN_LOGIN || 'admin';
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'berezne2024';
-const JWT_SECRET = process.env.JWT_SECRET || 'change-me-please-in-production';
+const ADMIN_LOGIN = requireEnv('ADMIN_LOGIN');
+const ADMIN_PASSWORD = requireEnv('ADMIN_PASSWORD');
+const JWT_SECRET = requireEnv('JWT_SECRET');
 const TOKEN_TTL = '12h';
 
 const CATEGORIES = ['Екологія', 'Інфраструктура', 'Культура', 'Освіта', 'Інше'];
@@ -81,130 +93,154 @@ const loginLimiter = rateLimit({
   message: { error: 'Забагато спроб входу. Спробуйте пізніше.' },
 });
 
-// ================= API =================
+async function main() {
+  const db = await connect();
+  const ideas = db.collection('ideas');
 
-// Список ідей. Контакти повертаються ЛИШЕ адміну.
-app.get('/api/ideas', (req, res) => {
-  const cid = ensureClientId(req, res);
-  const admin = isAdminReq(req);
+  // ================= API =================
 
-  const rows = db.prepare('SELECT * FROM ideas ORDER BY ts DESC').all();
-  const votedRows = db.prepare('SELECT idea_id FROM votes WHERE client_id = ?').all(cid);
-  const votedSet = new Set(votedRows.map((r) => r.idea_id));
+  // Список ідей. Контакти повертаються ЛИШЕ адміну.
+  app.get('/api/ideas', async (req, res) => {
+    try {
+      const cid = ensureClientId(req, res);
+      const admin = isAdminReq(req);
 
-  const result = rows.map((r) => {
-    const item = {
-      id: r.id,
-      name: r.name || '',
-      cat: r.cat,
-      text: r.text,
-      votes: r.votes,
-      status: r.status,
-      ts: r.ts,
-      voted: votedSet.has(r.id),
-    };
-    // Контакт бачить тільки адмін
-    if (admin) item.contact = r.contact || '';
-    return item;
-  });
+      const rows = await ideas.find({}).sort({ ts: -1 }).toArray();
 
-  res.json(result);
-});
+      const result = rows.map((r) => {
+        const votedBy = r.votedBy || [];
+        const item = {
+          id: r.id,
+          name: r.name || '',
+          cat: r.cat,
+          text: r.text,
+          votes: r.votes,
+          status: r.status,
+          ts: r.ts,
+          voted: votedBy.includes(cid),
+        };
+        // Контакт бачить тільки адмін
+        if (admin) item.contact = r.contact || '';
+        return item;
+      });
 
-// Створення нової ідеї
-app.post('/api/ideas', submitLimiter, (req, res) => {
-  const body = req.body || {};
-  const name = (body.name || '').toString().trim().slice(0, 50);
-  const cat = (body.cat || '').toString().trim();
-  const text = (body.text || '').toString().trim().slice(0, 1000);
-  const contact = (body.contact || '').toString().trim().slice(0, 100);
-
-  if (!CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Невірна категорія' });
-  if (text.length < 20) return res.status(400).json({ error: 'Опишіть ідею детальніше (мінімум 20 символів).' });
-
-  const cid = ensureClientId(req, res);
-  const id = 'idea_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex');
-  const ts = Date.now();
-
-  db.prepare(
-    'INSERT INTO ideas (id, name, cat, text, contact, votes, status, ts) VALUES (?, ?, ?, ?, ?, 1, ?, ?)'
-  ).run(id, name, cat, text, contact, 'нова', ts);
-
-  // Автор автоматично голосує за свою ідею
-  db.prepare('INSERT OR IGNORE INTO votes (idea_id, client_id, ts) VALUES (?, ?, ?)').run(id, cid, ts);
-
-  res.status(201).json({ id, name, cat, text, votes: 1, status: 'нова', ts, voted: true });
-});
-
-// Голосування (toggle)
-app.post('/api/ideas/:id/vote', (req, res) => {
-  const cid = ensureClientId(req, res);
-  const id = req.params.id;
-  const idea = db.prepare('SELECT * FROM ideas WHERE id = ?').get(id);
-  if (!idea) return res.status(404).json({ error: 'Ідею не знайдено' });
-
-  const existing = db.prepare('SELECT 1 FROM votes WHERE idea_id = ? AND client_id = ?').get(id, cid);
-
-  const tx = db.transaction(() => {
-    if (existing) {
-      db.prepare('DELETE FROM votes WHERE idea_id = ? AND client_id = ?').run(id, cid);
-      db.prepare('UPDATE ideas SET votes = MAX(0, votes - 1) WHERE id = ?').run(id);
-    } else {
-      db.prepare('INSERT INTO votes (idea_id, client_id, ts) VALUES (?, ?, ?)').run(id, cid, Date.now());
-      db.prepare('UPDATE ideas SET votes = votes + 1 WHERE id = ?').run(id);
+      res.json(result);
+    } catch (e) {
+      console.error('Помилка отримання ідей:', e);
+      res.status(500).json({ error: 'Внутрішня помилка сервера' });
     }
   });
-  tx();
 
-  const updated = db.prepare('SELECT votes FROM ideas WHERE id = ?').get(id);
-  res.json({ votes: updated.votes, voted: !existing });
-});
+  // Створення нової ідеї
+  app.post('/api/ideas', submitLimiter, async (req, res) => {
+    try {
+      const body = req.body || {};
+      const name = (body.name || '').toString().trim().slice(0, 50);
+      const cat = (body.cat || '').toString().trim();
+      const text = (body.text || '').toString().trim().slice(0, 1000);
+      const contact = (body.contact || '').toString().trim().slice(0, 100);
 
-// Вхід адміна
-app.post('/api/admin/login', loginLimiter, (req, res) => {
-  const body = req.body || {};
-  const login = (body.login || '').toString();
-  const password = (body.password || '').toString();
+      if (!CATEGORIES.includes(cat)) return res.status(400).json({ error: 'Невірна категорія' });
+      if (text.length < 20) return res.status(400).json({ error: 'Опишіть ідею детальніше (мінімум 20 символів).' });
 
-  if (safeEqual(login, ADMIN_LOGIN) && safeEqual(password, ADMIN_PASSWORD)) {
-    const token = jwt.sign({ role: 'admin', login }, JWT_SECRET, { expiresIn: TOKEN_TTL });
-    return res.json({ token });
-  }
-  res.status(401).json({ error: 'Невірний логін або пароль.' });
-});
+      const cid = ensureClientId(req, res);
+      const id = 'idea_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex');
+      const ts = Date.now();
 
-// Перевірка токена
-app.get('/api/admin/me', (req, res) => {
-  res.json({ admin: isAdminReq(req) });
-});
+      await ideas.insertOne({
+        id, name, cat, text, contact,
+        votes: 1,
+        votedBy: [cid],
+        status: 'нова',
+        ts,
+      });
 
-// Адмін: змінити статус ідеї
-app.patch('/api/ideas/:id', requireAdmin, (req, res) => {
-  const allowed = ['нова', 'на розгляді', 'прийнято'];
-  const status = (req.body && req.body.status || '').toString();
-  if (!allowed.includes(status)) return res.status(400).json({ error: 'Невірний статус' });
-  const info = db.prepare('UPDATE ideas SET status = ? WHERE id = ?').run(status, req.params.id);
-  if (info.changes === 0) return res.status(404).json({ error: 'Ідею не знайдено' });
-  res.json({ ok: true, status });
-});
-
-// Адмін: видалити ідею
-app.delete('/api/ideas/:id', requireAdmin, (req, res) => {
-  const tx = db.transaction(() => {
-    db.prepare('DELETE FROM votes WHERE idea_id = ?').run(req.params.id);
-    db.prepare('DELETE FROM ideas WHERE id = ?').run(req.params.id);
+      res.status(201).json({ id, name, cat, text, votes: 1, status: 'нова', ts, voted: true });
+    } catch (e) {
+      console.error('Помилка створення ідеї:', e);
+      res.status(500).json({ error: 'Внутрішня помилка сервера' });
+    }
   });
-  tx();
-  res.json({ ok: true });
-});
 
-// ---------- Статика (фронтенд) ----------
-app.use(express.static(path.join(__dirname, 'public')));
+  // Голосування (toggle), атомарно через findOneAndUpdate
+  app.post('/api/ideas/:id/vote', async (req, res) => {
+    try {
+      const cid = ensureClientId(req, res);
+      const id = req.params.id;
+      const existing = await ideas.findOne({ id });
+      if (!existing) return res.status(404).json({ error: 'Ідею не знайдено' });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+      const hasVoted = (existing.votedBy || []).includes(cid);
+      const update = hasVoted
+        ? { $pull: { votedBy: cid }, $inc: { votes: -1 } }
+        : { $addToSet: { votedBy: cid }, $inc: { votes: 1 } };
 
-app.listen(PORT, () => {
-  console.log(`Сервер запущено на порту ${PORT}`);
+      const result = await ideas.findOneAndUpdate({ id }, update, { returnDocument: 'after' });
+      const updated = result.value || result;
+      res.json({ votes: Math.max(0, updated.votes), voted: !hasVoted });
+    } catch (e) {
+      console.error('Помилка голосування:', e);
+      res.status(500).json({ error: 'Внутрішня помилка сервера' });
+    }
+  });
+
+  // Вхід адміна
+  app.post('/api/admin/login', loginLimiter, (req, res) => {
+    const body = req.body || {};
+    const login = (body.login || '').toString();
+    const password = (body.password || '').toString();
+
+    if (safeEqual(login, ADMIN_LOGIN) && safeEqual(password, ADMIN_PASSWORD)) {
+      const token = jwt.sign({ role: 'admin', login }, JWT_SECRET, { expiresIn: TOKEN_TTL });
+      return res.json({ token });
+    }
+    res.status(401).json({ error: 'Невірний логін або пароль.' });
+  });
+
+  // Перевірка токена
+  app.get('/api/admin/me', (req, res) => {
+    res.json({ admin: isAdminReq(req) });
+  });
+
+  // Адмін: змінити статус ідеї
+  app.patch('/api/ideas/:id', requireAdmin, async (req, res) => {
+    try {
+      const allowed = ['нова', 'на розгляді', 'прийнято'];
+      const status = ((req.body && req.body.status) || '').toString();
+      if (!allowed.includes(status)) return res.status(400).json({ error: 'Невірний статус' });
+      const result = await ideas.updateOne({ id: req.params.id }, { $set: { status } });
+      if (result.matchedCount === 0) return res.status(404).json({ error: 'Ідею не знайдено' });
+      res.json({ ok: true, status });
+    } catch (e) {
+      console.error('Помилка оновлення статусу:', e);
+      res.status(500).json({ error: 'Внутрішня помилка сервера' });
+    }
+  });
+
+  // Адмін: видалити ідею
+  app.delete('/api/ideas/:id', requireAdmin, async (req, res) => {
+    try {
+      await ideas.deleteOne({ id: req.params.id });
+      res.json({ ok: true });
+    } catch (e) {
+      console.error('Помилка видалення:', e);
+      res.status(500).json({ error: 'Внутрішня помилка сервера' });
+    }
+  });
+
+  // ---------- Статика (фронтенд) ----------
+  app.use(express.static(path.join(__dirname, 'public')));
+
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+  });
+
+  app.listen(PORT, () => {
+    console.log(`Сервер запущено на порту ${PORT}`);
+  });
+}
+
+main().catch((e) => {
+  console.error('Не вдалося запустити сервер:', e);
+  process.exit(1);
 });

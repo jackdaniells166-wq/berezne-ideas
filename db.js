@@ -1,40 +1,35 @@
 'use strict';
 
-const path = require('path');
-const fs = require('fs');
-const Database = require('better-sqlite3');
+const { MongoClient } = require('mongodb');
 
-// Шлях до файлу БД. На Render можна змінити через змінну DATA_DIR
-// (напр. на змонтований диск /var/data), щоб дані не зникали при деплої.
-const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+// Обов'язкові змінні середовища. Якщо чогось бракує — сервер падає
+// одразу з чіткою помилкою, а не тихо стартує в зламаному стані.
+function requireEnv(name) {
+  const v = process.env[name];
+  if (!v) {
+    console.error(`Відсутня обов'язкова змінна середовища: ${name}. Сервер не запущено.`);
+    process.exit(1);
+  }
+  return v;
+}
 
-const dbPath = path.join(DATA_DIR, 'ideas.db');
-const db = new Database(dbPath);
+const MONGODB_URI = requireEnv('MONGODB_URI');
+const MONGODB_DB = process.env.MONGODB_DB || 'berezne';
 
-db.pragma('journal_mode = WAL');
+const client = new MongoClient(MONGODB_URI);
+let db = null;
 
-// Таблиця ідей
-db.exec(`
-  CREATE TABLE IF NOT EXISTS ideas (
-    id       TEXT PRIMARY KEY,
-    name     TEXT,
-    cat      TEXT NOT NULL,
-    text     TEXT NOT NULL,
-    contact  TEXT,
-    votes    INTEGER NOT NULL DEFAULT 0,
-    status   TEXT NOT NULL DEFAULT 'нова',
-    ts       INTEGER NOT NULL
-  );
+async function connect() {
+  if (db) return db;
+  await client.connect();
+  db = client.db(MONGODB_DB);
 
-  CREATE TABLE IF NOT EXISTS votes (
-    idea_id   TEXT NOT NULL,
-    client_id TEXT NOT NULL,
-    ts        INTEGER NOT NULL,
-    PRIMARY KEY (idea_id, client_id)
-  );
+  // Індекси створюються один раз, ідемпотентно — safe re-run при кожному старті.
+  await db.collection('ideas').createIndex({ ts: -1 });
+  await db.collection('ideas').createIndex({ cat: 1 });
 
-  CREATE INDEX IF NOT EXISTS idx_ideas_ts ON ideas(ts);
-`);
+  console.log(`Підключено до MongoDB: ${MONGODB_DB}`);
+  return db;
+}
 
-module.exports = db;
+module.exports = { connect };
