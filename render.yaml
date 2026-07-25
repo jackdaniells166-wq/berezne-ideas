@@ -3,6 +3,7 @@ services:
     name: berezne-ideas
     runtime: node
     plan: free
+    region: frankfurt
     buildCommand: npm install
     startCommand: npm start
     envVars:
