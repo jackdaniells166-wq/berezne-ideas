@@ -84,7 +84,8 @@
         .logo-svg {
             height: 36px;
             width: 36px;
-            /* Видалено fill: var(--ink), оскільки новий SVG має власні кольори */
+            object-fit: contain;
+            display: block;
         }
 
         .site-title-group {
@@ -621,24 +622,7 @@
 
     <header>
         <a href="#" class="logo-container" aria-label="Головна">
-            <svg class="logo-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-                <!-- Фон-коло (можна прибрати, якщо потрібен прозорий фон) -->
-                <circle cx="50" cy="50" r="50" fill="#2d373f" />
-                
-                <!-- Літера 'S' -->
-                <!-- Зелена верхня частина -->
-                <path d="M 45 28 A 17 17 0 0 0 28 45 L 28 50 L 45 28 Z" fill="#80c342" />
-                <!-- Рожева нижня частина -->
-                <path d="M 45 68 A 17 17 0 0 1 28 51 L 28 46 L 45 68 Z" fill="#f482ba" />
-                
-                <!-- Літера 'R' -->
-                <!-- Фіолетовий стовпчик -->
-                <rect x="47" y="32" width="12" height="35" fill="#8b5bd2" />
-                <!-- Блакитна верхня петля -->
-                <path d="M 60 32 H 62 A 15 15 0 0 1 77 47 V 47 A 15 15 0 0 1 60 62 L 60 32 Z" fill="#1fc4b7" />
-                <!-- Помаранчева ніжка -->
-                <path d="M 61 50 L 76 67 H 61 Z" fill="#fdb05f" />
-            </svg>
+            <img class="logo-svg" src="/images/logo.png" alt="Логотип — Відкрита влада" />
             <div class="site-title-group">
                 <span class="site-title">Відкрита влада</span>
                 <span class="site-subtitle">відкрита молодь</span>
