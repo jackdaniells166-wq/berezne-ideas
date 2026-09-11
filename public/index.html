@@ -316,6 +316,119 @@
         }
         .filters select:focus { border-color: var(--primary); outline: none; }
 
+        .custom-select {
+            position: relative;
+        }
+
+        .custom-select-trigger {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            appearance: none;
+            background: var(--canvas);
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            padding: 10px 14px 10px 16px;
+            font-size: 14px;
+            font-family: var(--font-text);
+            font-weight: 500;
+            color: var(--ink);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+            transition: border-color 0.2s;
+        }
+        .custom-select-trigger:hover { border-color: var(--primary); }
+
+        .custom-select-trigger .chevron {
+            width: 12px;
+            height: 12px;
+            fill: var(--ink-muted-80);
+            transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-select.open .custom-select-trigger .chevron { transform: rotate(180deg); }
+
+        .custom-select-panel {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 0;
+            min-width: 200px;
+            background: var(--canvas);
+            border: 1px solid var(--hairline);
+            border-radius: 14px;
+            box-shadow: 0 16px 40px rgba(20,20,40,0.14);
+            padding: 6px;
+            z-index: 50;
+            opacity: 0;
+            transform: translateY(-8px) scale(0.96);
+            transform-origin: top left;
+            pointer-events: none;
+            transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .custom-select.open .custom-select-panel {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+            pointer-events: auto;
+        }
+
+        .custom-select-option {
+            padding: 9px 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: var(--font-text);
+            color: var(--ink);
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+        .custom-select-option:hover { background: var(--surface-pearl); }
+        .custom-select-option.active { background: var(--primary); color: #ffffff; }
+
+        .sort-toggle {
+            position: relative;
+            display: inline-flex;
+            background: var(--canvas);
+            border: 1px solid var(--hairline);
+            border-radius: 999px;
+            padding: 4px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.02);
+        }
+
+        .sort-toggle-slider {
+            position: absolute;
+            top: 4px;
+            bottom: 4px;
+            left: 4px;
+            width: 0;
+            border-radius: 999px;
+            background: var(--primary);
+            transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s ease;
+            z-index: 1;
+        }
+
+        .sort-toggle-btn {
+            position: relative;
+            z-index: 2;
+            border: none;
+            background: transparent;
+            padding: 9px 18px;
+            font-size: 14px;
+            font-family: var(--font-text);
+            font-weight: 500;
+            color: var(--ink-muted-80);
+            cursor: pointer;
+            border-radius: 999px;
+            transition: color 0.25s ease, transform 0.15s ease;
+            white-space: nowrap;
+        }
+
+        .sort-toggle-btn:hover { color: var(--ink); }
+        .sort-toggle-btn:active { transform: scale(0.95); }
+        .sort-toggle-btn.active { color: #ffffff; }
+
+        @media (max-width: 860px) {
+            .sort-toggle { flex: 1; }
+            .sort-toggle-btn { flex: 1; }
+        }
+
         .ideas-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -337,6 +450,25 @@
         .idea-card:hover {
             transform: translateY(-4px);
             box-shadow: 0 14px 40px rgba(0,0,0,0.08);
+        }
+
+        @keyframes cardEnter {
+            from { opacity: 0; transform: translateY(14px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .card-enter {
+            animation: cardEnter 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+        }
+
+        @keyframes heartPop {
+            0% { transform: scale(1); }
+            35% { transform: scale(1.3); }
+            60% { transform: scale(0.92); }
+            100% { transform: scale(1); }
+        }
+        .heart-btn.voted svg {
+            fill: currentColor;
+            animation: heartPop 0.4s ease;
         }
 
         .card-top-border {
@@ -486,10 +618,6 @@
             transition: fill 0.2s;
         }
 
-        .heart-btn.voted svg {
-            fill: currentColor;
-        }
-
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -597,6 +725,8 @@
             .search-box { max-width: none; }
             .filters { width: 100%; display: flex; gap: 10px; }
             .filters select { flex: 1; }
+            .custom-select { flex: 1; }
+            .custom-select-panel { left: 0; right: 0; min-width: unset; }
             header .btn span { display: none; }
             header .btn::after { content: "+ Ідея"; }
         }
@@ -673,7 +803,21 @@
                 <input type="text" id="searchIdeas" class="search-input" placeholder="Пошук ідей..." oninput="renderIdeas()">
             </div>
             <div class="filters">
-                <select id="filterCat" onchange="renderIdeas()">
+                <div class="custom-select" id="catDropdown">
+                    <button type="button" class="custom-select-trigger" onclick="toggleCatDropdown()">
+                        <span id="catDropdownLabel">Усі категорії</span>
+                        <svg class="chevron" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z"/></svg>
+                    </button>
+                    <div class="custom-select-panel" id="catDropdownPanel">
+                        <div class="custom-select-option active" data-value="all" onclick="selectCategory('all','Усі категорії')">Усі категорії</div>
+                        <div class="custom-select-option" data-value="Екологія" onclick="selectCategory('Екологія','Екологія')">Екологія</div>
+                        <div class="custom-select-option" data-value="Інфраструктура" onclick="selectCategory('Інфраструктура','Інфраструктура')">Інфраструктура</div>
+                        <div class="custom-select-option" data-value="Культура" onclick="selectCategory('Культура','Культура та спорт')">Культура та спорт</div>
+                        <div class="custom-select-option" data-value="Освіта" onclick="selectCategory('Освіта','Освіта')">Освіта</div>
+                        <div class="custom-select-option" data-value="Інше" onclick="selectCategory('Інше','Інше')">Інше</div>
+                    </div>
+                </div>
+                <select id="filterCat" style="display:none" aria-hidden="true">
                     <option value="all">Усі категорії</option>
                     <option value="Екологія">Екологія</option>
                     <option value="Інфраструктура">Інфраструктура</option>
@@ -681,7 +825,12 @@
                     <option value="Освіта">Освіта</option>
                     <option value="Інше">Інше</option>
                 </select>
-                <select id="sortIdeas" onchange="renderIdeas()">
+                <div class="sort-toggle" id="sortToggle">
+                    <span class="sort-toggle-slider" id="sortToggleSlider"></span>
+                    <button type="button" class="sort-toggle-btn active" data-sort="newest" onclick="setSortType('newest')">Найновіші</button>
+                    <button type="button" class="sort-toggle-btn" data-sort="popular" onclick="setSortType('popular')">Популярні</button>
+                </div>
+                <select id="sortIdeas" style="display:none" aria-hidden="true">
                     <option value="newest">Найновіші</option>
                     <option value="popular">Популярні</option>
                 </select>
@@ -836,6 +985,43 @@
             return `<span class="status-badge status-nova">${escapeHTML(status)}</span>`;
         }
 
+        function toggleCatDropdown(forceClose) {
+            const dd = document.getElementById('catDropdown');
+            const shouldOpen = forceClose === true ? false : !dd.classList.contains('open');
+            dd.classList.toggle('open', shouldOpen);
+        }
+
+        function selectCategory(value, label) {
+            document.getElementById('filterCat').value = value;
+            document.getElementById('catDropdownLabel').textContent = label;
+            document.querySelectorAll('#catDropdownPanel .custom-select-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.value === value);
+            });
+            toggleCatDropdown(true);
+            renderIdeas();
+        }
+
+        document.addEventListener('click', (e) => {
+            const dd = document.getElementById('catDropdown');
+            if (dd && !dd.contains(e.target)) dd.classList.remove('open');
+        });
+
+        function setSortType(type) {
+            document.getElementById('sortIdeas').value = type;
+
+            const toggle = document.getElementById('sortToggle');
+            toggle.querySelectorAll('.sort-toggle-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.sort === type);
+            });
+
+            const activeBtn = toggle.querySelector('.sort-toggle-btn.active');
+            const slider = document.getElementById('sortToggleSlider');
+            slider.style.width = activeBtn.offsetWidth + 'px';
+            slider.style.transform = `translateX(${activeBtn.offsetLeft - 4}px)`;
+
+            renderIdeas();
+        }
+
         function renderIdeas() {
             const grid = document.getElementById('ideasGrid');
             const filterCat = document.getElementById('filterCat').value;
@@ -863,10 +1049,11 @@
                 return;
             }
 
-            filtered.forEach(idea => {
+            filtered.forEach((idea, index) => {
                 const conf = catConfig[idea.cat] || catConfig['Інше'];
                 const card = document.createElement('div');
-                card.className = 'idea-card';
+                card.className = 'idea-card card-enter';
+                card.style.animationDelay = (Math.min(index, 14) * 45) + 'ms';
                 card.style.setProperty('--cat-color', conf.color);
                 card.style.setProperty('--cat-bg', conf.bg);
 
@@ -1113,6 +1300,7 @@
         }
 
         init();
+        window.requestAnimationFrame(() => setSortType('newest'));
     </script>
 </body>
 </html>
