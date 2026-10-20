@@ -4,6 +4,20 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Стіна ідей Березнівської громади</title>
+    <meta name="theme-color" content="#f8f9fa">
+    <script>
+        (function () {
+            try {
+                var t = localStorage.getItem('berezne_theme');
+                if (t !== 'dark' && t !== 'light') {
+                    t = (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
+                }
+                document.documentElement.setAttribute('data-theme', t);
+                var m = document.querySelector('meta[name="theme-color"]');
+                if (m) m.setAttribute('content', t === 'dark' ? '#0d1015' : '#f8f9fa');
+            } catch (e) {}
+        })();
+    </script>
 
     <link rel="icon" type="image/png" href="/images/favicon.png">
 
@@ -761,6 +775,136 @@
             font-family: var(--font-text);
         }
         .admin-del-btn:hover { background: #ffd7d3; }
+
+        /* ---------- Кнопка перемикання теми ---------- */
+        .theme-toggle {
+            position: relative;
+            overflow: hidden;
+            width: 40px;
+            height: 40px;
+            flex-shrink: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-pearl);
+            border: 1px solid var(--hairline);
+            border-radius: 12px;
+            color: var(--ink);
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.15s ease;
+        }
+        .theme-toggle:hover { background: var(--divider-soft); }
+        .theme-toggle:active { transform: scale(0.92); }
+        .theme-toggle svg {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+        }
+        .theme-toggle .icon-moon { opacity: 1; transform: rotate(0) scale(1); }
+        .theme-toggle .icon-sun { opacity: 0; transform: rotate(-90deg) scale(0.5); }
+        [data-theme="dark"] .theme-toggle .icon-moon { opacity: 0; transform: rotate(90deg) scale(0.5); }
+        [data-theme="dark"] .theme-toggle .icon-sun { opacity: 1; transform: rotate(0) scale(1); }
+
+        /* Плавний перехід кольорів лише в момент перемикання теми */
+        html.theme-anim, html.theme-anim *, html.theme-anim *::before, html.theme-anim *::after {
+            transition: background-color 0.35s ease, color 0.35s ease, border-color 0.35s ease, box-shadow 0.35s ease, fill 0.35s ease !important;
+        }
+
+        /* Шапка не має «ламатися» після додавання кнопки теми */
+        .header-action .btn { white-space: nowrap; }
+        @media (max-width: 860px) {
+            .header-action { gap: 6px; }
+            .theme-toggle { width: 38px; height: 38px; border-radius: 11px; }
+            .site-title { white-space: nowrap; font-size: 14px; }
+            .site-subtitle { white-space: nowrap; }
+        }
+        @media (max-width: 860px) {
+            /* Рядок фільтрів: переноситься на новий рядок замість виходу за межі екрана */
+            .filters { flex-wrap: wrap; }
+            .custom-select { flex: 1 1 120px; min-width: 0; }
+            .custom-select-trigger { width: 100%; justify-content: space-between; padding: 10px 12px; }
+            .sort-toggle { flex: 1 1 190px; }
+            .sort-toggle-btn { padding: 9px 12px; font-size: 13px; }
+        }
+        @media (max-width: 380px) {
+            header { padding: 0 12px; }
+            .logo-container { gap: 8px; }
+            .site-subtitle { display: none; }
+            .site-title { font-size: 13px; }
+            .theme-toggle { width: 36px; height: 36px; }
+            .menu-toggle { width: 38px; height: 38px; }
+        }
+
+        .header-nav a { white-space: nowrap; }
+        @media (min-width: 861px) and (max-width: 1040px) {
+            header { padding: 0 24px; }
+            .header-nav { gap: 18px; }
+            .logo-container, .header-action { width: auto; }
+        }
+
+        @media (max-width: 360px) {
+            .site-title { font-size: 12px; }
+            header .btn { padding: 9px 14px; }
+        }
+
+        /* ---------- Темна тема ---------- */
+        [data-theme="dark"] {
+            color-scheme: dark;
+            --primary: #2f7fe0;
+            --primary-focus: #256fcb;
+            --ink: #eceef2;
+            --ink-muted-80: #b6bcc8;
+            --ink-muted-48: #7b8394;
+            --divider-soft: #272c37;
+            --hairline: #343a47;
+            --canvas: #161a22;
+            --canvas-parchment: #0d1015;
+            --surface-pearl: #1d222c;
+            --error: #f87171;
+            --success: #34d399;
+        }
+        [data-theme="dark"] body {
+            background-image:
+                radial-gradient(circle at 15% 20%, rgba(47, 127, 224, 0.16) 0%, transparent 42%),
+                radial-gradient(circle at 85% 30%, rgba(175, 82, 222, 0.12) 0%, transparent 42%);
+        }
+        [data-theme="dark"] .bg-pattern { opacity: 0.18; }
+        [data-theme="dark"] header {
+            background: rgba(13, 16, 21, 0.55);
+            border-bottom-color: rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.25);
+        }
+        [data-theme="dark"] .site-title { color: var(--ink); }
+        [data-theme="dark"] .btn { box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35); }
+        [data-theme="dark"] .idea-card {
+            border-color: rgba(255, 255, 255, 0.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+        }
+        [data-theme="dark"] .idea-card:hover { box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55); }
+        [data-theme="dark"] .category-badge {
+            background: color-mix(in srgb, var(--cat-color) 20%, transparent);
+        }
+        [data-theme="dark"] .status-nova { background: rgba(217, 119, 6, 0.18); color: #fbbf24; }
+        [data-theme="dark"] .status-rozglyad { background: rgba(59, 142, 234, 0.18); color: #7ab8ff; }
+        [data-theme="dark"] .status-pryynyato { background: rgba(34, 197, 94, 0.16); color: #4ade80; }
+        [data-theme="dark"] .heart-btn:hover { background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.4); }
+        [data-theme="dark"] .heart-btn.voted { background: rgba(248, 113, 113, 0.16); border-color: var(--error); }
+        [data-theme="dark"] .custom-select-panel { box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55); }
+        [data-theme="dark"] .modal-overlay { background: rgba(0, 0, 0, 0.6); }
+        [data-theme="dark"] .modal { box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5); }
+        [data-theme="dark"] .form-control:focus { box-shadow: 0 0 0 3px rgba(47, 127, 224, 0.25); }
+        [data-theme="dark"] .form-error-msg { background: rgba(248, 113, 113, 0.14); }
+        [data-theme="dark"] input, [data-theme="dark"] select, [data-theme="dark"] textarea { color: var(--ink); }
+        [data-theme="dark"] select option { background: var(--canvas); color: var(--ink); }
+        [data-theme="dark"] .toast {
+            background: #2a303c;
+            color: var(--ink);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+        }
+        [data-theme="dark"] .admin-del-btn { background: rgba(248, 113, 113, 0.14); border-color: rgba(248, 113, 113, 0.4); }
+        [data-theme="dark"] .admin-del-btn:hover { background: rgba(248, 113, 113, 0.26); }
     </style>
 </head>
 <body>
@@ -783,6 +927,10 @@
         </nav>
 
         <div class="header-action">
+            <button type="button" class="theme-toggle" id="themeToggle" onclick="toggleTheme()" aria-label="Увімкнути темну тему" title="Змінити тему">
+                <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+                <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+            </button>
             <button class="btn" onclick="openModal()"><span>Запропонувати ідею +</span></button>
             <button class="menu-toggle" id="menuToggle" onclick="toggleMobileMenu()" aria-label="Меню">
                 <svg viewBox="0 0 24 24" width="22" height="22"><path d="M3 6h18M3 12h18M3 18h18" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
@@ -983,6 +1131,35 @@
             if(status === 'прийнято') return `<span class="status-badge status-pryynyato">Прийнято до реалізації</span>`;
             if(status === 'на розгляді') return `<span class="status-badge status-rozglyad">На розгляді</span>`;
             return `<span class="status-badge status-nova">${escapeHTML(status)}</span>`;
+        }
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            const meta = document.querySelector('meta[name="theme-color"]');
+            if (meta) meta.setAttribute('content', theme === 'dark' ? '#0d1015' : '#f8f9fa');
+            const btn = document.getElementById('themeToggle');
+            if (btn) {
+                btn.setAttribute('aria-label', theme === 'dark' ? 'Увімкнути світлу тему' : 'Увімкнути темну тему');
+                btn.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false');
+            }
+        }
+
+        function toggleTheme() {
+            const root = document.documentElement;
+            const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            root.classList.add('theme-anim');
+            applyTheme(next);
+            try { localStorage.setItem('berezne_theme', next); } catch (e) {}
+            setTimeout(() => root.classList.remove('theme-anim'), 450);
+        }
+
+        // Якщо користувач не обирав тему вручну — слідуємо за системною
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                let saved = null;
+                try { saved = localStorage.getItem('berezne_theme'); } catch (err) {}
+                if (!saved) applyTheme(e.matches ? 'dark' : 'light');
+            });
         }
 
         function toggleCatDropdown(forceClose) {
@@ -1300,6 +1477,7 @@
         }
 
         init();
+        applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light');
         window.requestAnimationFrame(() => setSortType('newest'));
     </script>
 </body>
