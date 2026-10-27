@@ -16,20 +16,34 @@ function requireEnv(name) {
 const MONGODB_URI = requireEnv('MONGODB_URI');
 const MONGODB_DB = process.env.MONGODB_DB || 'berezne';
 
-const client = new MongoClient(MONGODB_URI);
+// Таймаут вибору сервера скорочено (дефолт драйвера — 30 с), щоб невдала
+// спроба швидко завершувалась і connectWithRetry у server.js міг повторити її.
+const SERVER_SELECTION_TIMEOUT_MS = Number(process.env.MONGODB_TIMEOUT_MS) || 10000;
+
+let client = null;
 let db = null;
 
 async function connect() {
   if (db) return db;
-  await client.connect();
-  db = client.db(MONGODB_DB);
 
-  // Індекси створюються один раз, ідемпотентно — safe re-run при кожному старті.
-  await db.collection('ideas').createIndex({ ts: -1 });
-  await db.collection('ideas').createIndex({ cat: 1 });
+  // Новий клієнт на кожну спробу: після невдалого connect() старий краще не перевикористовувати.
+  client = new MongoClient(MONGODB_URI, { serverSelectionTimeoutMS: SERVER_SELECTION_TIMEOUT_MS });
+  try {
+    await client.connect();
+    const database = client.db(MONGODB_DB);
 
-  console.log(`Підключено до MongoDB: ${MONGODB_DB}`);
-  return db;
+    // Індекси створюються один раз, ідемпотентно — safe re-run при кожному старті.
+    await database.collection('ideas').createIndex({ ts: -1 });
+    await database.collection('ideas').createIndex({ cat: 1 });
+
+    db = database;
+    console.log(`Підключено до MongoDB: ${MONGODB_DB}`);
+    return db;
+  } catch (e) {
+    await client.close().catch(() => {});
+    client = null;
+    throw e;
+  }
 }
 
 module.exports = { connect };

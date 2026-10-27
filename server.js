@@ -95,9 +95,27 @@ const loginLimiter = rateLimit({
   message: { error: 'Забагато спроб входу. Спробуйте пізніше.' },
 });
 
-async function main() {
-  const db = await connect();
-  const ideas = db.collection('ideas');
+function main() {
+  // Колекція зʼявляється, коли MongoDB підключено (див. connectWithRetry нижче).
+  // HTTP-порт відкриваємо ОДРАЗУ, не чекаючи базу: на безкоштовному Render сервіс
+  // «прокидається» з нуля, і якщо порт не відкрився вчасно (або процес впав через
+  // одну невдалу спробу підключення), Render віддає 503 «hibernate-wake-error».
+  let ideas = null;
+
+  // Ендпоінти, що працюють із базою, відповідають 503, поки підключення не готове.
+  const needDb = (req, res, next) => {
+    if (!ideas) {
+      return res.status(503).json({ error: 'Сервер щойно прокинувся й підключається до бази. Спробуйте за кілька секунд.' });
+    }
+    next();
+  };
+  app.use('/api/ideas', needDb);
+  app.use('/api/admin/export', needDb);
+
+  // Легкий ендпоінт для моніторингу/«будильника»: завжди 200, не торкається бази.
+  app.get('/healthz', (req, res) => {
+    res.json({ ok: true, db: Boolean(ideas), uptime: Math.round(process.uptime()) });
+  });
 
   // ================= API =================
 
@@ -238,11 +256,30 @@ async function main() {
   });
 
   app.listen(PORT, () => {
-    console.log(`Сервер запущено на порту ${PORT}`);
+    console.log(`Сервер слухає порт ${PORT} (старт за ${Math.round(process.uptime() * 1000)} мс)`);
   });
+
+  // Підключення до бази — у фоні, з повторами. Не вбиваємо процес через тимчасову помилку.
+  (async function connectWithRetry() {
+    const started = Date.now();
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const db = await connect();
+        ideas = db.collection('ideas');
+        console.log(`MongoDB готова (спроба ${attempt}, ${Date.now() - started} мс від початку підключення)`);
+        return;
+      } catch (e) {
+        const wait = Math.min(30000, 2000 * attempt);
+        console.error(`MongoDB: спроба ${attempt} невдала (${e.name}: ${e.message}). Наступна через ${wait / 1000} с.`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+  })();
 }
 
-main().catch((e) => {
-  console.error('Не вдалося запустити сервер:', e);
-  process.exit(1);
+// Одна «забута» помилка в промісі не повинна валити весь сервер.
+process.on('unhandledRejection', (e) => {
+  console.error('Необроблена помилка (unhandledRejection):', e);
 });
+
+main();
