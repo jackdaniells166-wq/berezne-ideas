@@ -1100,10 +1100,20 @@
             await loadIdeas();
         }
 
-        async function loadIdeas() {
+        async function loadIdeas(attempt = 1) {
             const grid = document.getElementById('ideasGrid');
             try {
                 const r = await fetch(API_BASE + '/api/ideas', { headers: authHeaders() });
+                // 503 = сервер щойно прокинувся й ще підключається до бази: повторюємо самі
+                if (r.status === 503 && attempt <= 12) {
+                    grid.innerHTML = `
+                        <div class="empty-state">
+                            <h3>Сервер прокидається…</h3>
+                            <p>Це триває кілька секунд, сторінка оновиться сама.</p>
+                        </div>`;
+                    setTimeout(() => loadIdeas(attempt + 1), 3000);
+                    return;
+                }
                 if (!r.ok) throw new Error('bad response');
                 allIdeas = await r.json();
                 renderIdeas();
